@@ -12,10 +12,7 @@ import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
-import java.util.TimerTask;
+import java.util.*;
 
 public class Parser extends TimerTask {
     @Override
@@ -32,36 +29,42 @@ public class Parser extends TimerTask {
 
     void parse(WebDriver driver, JavascriptExecutor jse){
         try{
-            //todo создать json обьект со списком картинок и отслыать пост запрос с ним;
+            //todo получать информацию из бд по последней картинке
+
             driver.get("http://www.reddit.com/r/memes/new/");
 
             List<MemeModel> images = new ArrayList<>();
-            var element =  driver.findElement(By.cssSelector("img[alt = 'Post image']"));
-            WebElement nextElem;
+            var element =  Optional.of(driver.findElement(By.cssSelector("img[alt = 'Post image']")));
+            Optional<WebElement> nextElem;
             int i = 0;
-            while (i != 30){
-                nextElem = driver.findElement(with(By.cssSelector("img[alt = 'Post image']")).below(element));
-                Thread.sleep(500);
-                jse.executeScript("window.scrollBy(0, 1200)");
-                Thread.sleep(500);
-                jse.executeScript("arguments[0].scrollIntoView();", nextElem);
-                if(!nextElem.getAttribute("src").startsWith("https://ex")){
-                    images.add(MemeModel.setModel(nextElem.getAttribute("src"), 0, 0));
-                    System.out.println(images.get(i));
-                    i++;
+            Boolean alreadyFoundedImage = false;
+            while (i != 40){
+
+                nextElem = Parser.getElement(driver, element.get());
+                if(nextElem.isEmpty()){
+                    while(true){
+                        jse.executeScript("arguments[0].scrollIntoView();", element.get());
+                        jse.executeScript("window.scrollBy(0, 1200)");
+                        Thread.sleep(100);
+                        nextElem = Parser.getElement(driver, element.get());
+                        if(nextElem.isPresent()){break;}
+                    }
+                }
+                if(!nextElem.get().getAttribute("src").startsWith("https://ex")){
+                    images.add(MemeModel.setModel(nextElem.get().getAttribute("src"), 0, 0));
                 }
                 element = nextElem;
-
+                i++;
             }
-
 
             for (MemeModel m: images) {
                 driver.get(m.getReference());
                 var img = driver.findElement(By.cssSelector("img"));
-                System.out.println(img.getSize().height + " : " + img.getSize().width);
+                System.out.println(img.getAttribute("src") + " --- " + img.getSize().height + " : " + img.getSize().width);
                 m.setLength(img.getSize().height);
                 m.setWidth(img.getSize().width);
             }
+            System.out.println(images.size());
             driver.close();
 
             String url_query = "http://localhost:8080/memes";
@@ -84,9 +87,15 @@ public class Parser extends TimerTask {
             String response = Arrays.toString(in.readAllBytes());
             System.out.println(response);
 
-
         } catch (Exception e){
             e.printStackTrace();
+        }
+    }
+    public static Optional<WebElement> getElement(WebDriver driver, WebElement previousElem){
+        try{
+            return Optional.of(driver.findElement(with(By.cssSelector("img[alt = 'Post image']")).below(previousElem)));
+        }catch (Exception e) {
+            return Optional.empty();
         }
     }
 }
